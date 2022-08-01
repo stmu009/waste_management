@@ -27,8 +27,8 @@ float timeOut = MAX_DISTANCE * 60;
 int soundVelocity = 340; // define sound speed=340m/s
 float sonarDistance = 0;
 
-const char *ssid_Router     = "ORBI00"; //Enter the router name
-const char *password_Router = "WIFIPASSWORD"; //Enter the router password
+const char *ssid_Router     = "SSID"; //Enter the router name
+const char *password_Router = "PASSWORD"; //Enter the router password
 
 const char* mqtt_server = "broker.hivemq.com";
 //const char* mqtt_server = "f19f31c276ac420589c0c2288ef8f802.s1.eu.hivemq.cloud";
@@ -38,6 +38,9 @@ char mac[50];
 char clientId[50];
 const char* mqttUser = "stmu2022";
 const char* mqttPassword = "stmu2022";
+
+String state = "EMPTY";
+
 
 WiFiClient espClient;
 //WiFiClientSecure espClient;
@@ -50,7 +53,7 @@ PubSubClient client(espClient);
    note:If lcd1602 uses PCF8574T, IIC's address is 0x27,
         or lcd1602 uses PCF8574AT, IIC's address is 0x3F.
 */
-LiquidCrystal_I2C lcd(0x3F, 16, 2);
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 /*
    done - todo 1: change loop delay hardcoding
@@ -82,6 +85,9 @@ void setup()
 
   client.setServer(mqtt_server, port);
   client.setCallback(callback);
+  mqttReconnect();
+  client.subscribe("testTopic");
+  
 
 }
 
@@ -112,17 +118,27 @@ void loop()
 
   if (sonarDistance <= FULL_THRESHOLD)
   {
+
     lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
     lcd.print("Basket is Full!");
-    if (!client.connected()) {
-      mqttReconnect();
-    } else {
-      client.publish("testTopic", "FULL");
-      client.subscribe("testTopic");
+    if (state == "EMPTY") // if previous state is EMPTY then send message
+    {
+      if (!client.connected()) {
+        mqttReconnect();
+      } else {
+        client.publish("testTopic", "State change to FULL");
+        client.subscribe("testTopic");
+      }
+
     }
-    client.loop();
+    state = "FULL";
+  }
+  else {
+    state = "EMPTY";
   }
 
+
+  client.loop();
 
 
 
@@ -213,7 +229,7 @@ void mqttReconnect() {
     if (client.connect(clientId.c_str(), mqttUser, mqttPassword)) {
       Serial.println("connected");
       // Once connected, publish an announcement…
-      client.publish("testTopic", "FULL");
+//      client.publish("testTopic", "State change to FULL");
       // … and resubscribe
       client.subscribe("testTopic");
     } else {
