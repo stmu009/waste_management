@@ -54,6 +54,7 @@ PubSubClient client(espClient);
         or lcd1602 uses PCF8574AT, IIC's address is 0x3F.
 */
 LiquidCrystal_I2C lcd(0x27, 16, 2);
+// LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
 /*
    done - todo 1: change loop delay hardcoding
@@ -75,7 +76,7 @@ void setup()
   lcd.init();                     // LCD driver initialization
   lcd.backlight();                // Open the backlight
   lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
-  lcd.print("Trash Level:");     // The print content is displayed on the LCD
+  lcd.print("Trash Level:   ");     // The print content is displayed on the LCD
 
   pinMode(trigPin, OUTPUT); // set trigPin to output mode
   pinMode(echoPin, INPUT);  // set echoPin to input mode
@@ -98,7 +99,7 @@ void loop()
 
   Serial.printf("Threshold: ");
   Serial.print(FULL_THRESHOLD);
-  Serial.printf("\n");
+  Serial.println("cm");
   //  Serial.printf("BASKET_HEIGHT: ");
   //  Serial.print(BASKET_HEIGHT);
   //  Serial.printf("\n");
@@ -111,16 +112,16 @@ void loop()
   Serial.println("cm");
 
   lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
-  lcd.print("Trash Level:");     // The print content is displayed on the LCD
+  lcd.print("Trash Level:    ");     // The print content is displayed on the LCD
   lcd.setCursor(0, 1);            // Move the cursor to row 1, column 0
   lcd.print((1 - (sonarDistance / BASKET_HEIGHT)) * 100);
-  lcd.print("%");          // The count is displayed every second
+  lcd.print("%   ");          // The count is displayed every second
 
   if (sonarDistance <= FULL_THRESHOLD)
   {
 
     lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
-    lcd.print("Basket is Full!");
+    lcd.print("Basket is Full! ");
     if (state == "EMPTY") // if previous state is EMPTY then send message
     {
       if (!client.connected()) {
@@ -188,7 +189,8 @@ void connectWiFi()
   }
   Serial.println("");
 
-  WiFi.begin(ssid_Router, password_Router);
+  // WiFi.begin(ssid_Router, password_Router);
+  WiFi.begin("Wokwi-GUEST", "", 6);
   Serial.println(String("Connecting to ") + ssid_Router);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
