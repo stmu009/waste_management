@@ -8,7 +8,32 @@
 #include <Wire.h>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include <NTPClient.h>
 
+///////////////////CONFIGURATION DEFAULTS/////////////////////
+int CONTAINER_HEIGHT = 20;         // cm
+float FULL_THRESHOLD_PERCENT = .80; // percent threshold to empty CONTAINER
+#define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
+///////////////////CONFIGURATION DEFAULTS/////////////////////
+
+///////////////////DEVICE CONNECTION SETUP//////////////////////////////
+const char *ssid_Router     = "SSID"; //Enter the router name
+const char *password_Router = "PASSWORD"; //Enter the router password
+const char* mqtt_server = "broker.hivemq.com";
+// const char* mqtt_server = "39958bcd92af469e963bca529830149b.s1.eu.hivemq.cloud";
+// "f19f31c276ac420589c0c2288ef8f802.s1.eu.hivemq.cloud";
+int port = 1883;
+// int port = 8883;
+char mac[50];
+char clientId[50];
+const char* mqttUser = "stmu2022";
+const char* mqttPassword = "stmu2022";
+///////////////////DEVICE CONNECTION SETUP//////////////////////////////
+
+#define NTP_SERVER     "pool.ntp.org"
+#define UTC_OFFSET     0
+#define UTC_OFFSET_DST 0
 
 #define trigPin 13       // define TrigPin
 #define echoPin 14       // define EchoPin.
@@ -19,25 +44,12 @@
 #define BAUD 115200
 #define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
 #define SONAR_DELAY 10            // microseconds
-int BASKET_HEIGHT = 20;         // cm
-float FULL_THRESHOLD_PERCENT = .80; // percent threshold to empty basket
-float FULL_THRESHOLD = BASKET_HEIGHT * (1 - FULL_THRESHOLD_PERCENT);
+float FULL_THRESHOLD = CONTAINER_HEIGHT * (1 - FULL_THRESHOLD_PERCENT);
 // timeOut= 2*MAX_DISTANCE /100 /340 *1000000 = MAX_DISTANCE*58.8
 float timeOut = MAX_DISTANCE * 60;
 int soundVelocity = 340; // define sound speed=340m/s
 float sonarDistance = 0;
-
-const char *ssid_Router     = "SSID"; //Enter the router name
-const char *password_Router = "PASSWORD"; //Enter the router password
-
-const char* mqtt_server = "broker.hivemq.com";
-//const char* mqtt_server = "f19f31c276ac420589c0c2288ef8f802.s1.eu.hivemq.cloud";
-int port = 1883;
-//int port = 8883;
-char mac[50];
-char clientId[50];
-const char* mqttUser = "stmu2022";
-const char* mqttPassword = "stmu2022";
+float thresholdPercentage = 0.00;
 
 String state = "EMPTY";
 
@@ -48,6 +60,8 @@ WiFiClient espClient;
 PubSubClient client(espClient);
 //PubSubClient * client;
 
+String uniq = "";
+
 
 /*
    note:If lcd1602 uses PCF8574T, IIC's address is 0x27,
@@ -56,22 +70,10 @@ PubSubClient client(espClient);
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // LiquidCrystal_I2C lcd(0x3F, 16, 2);
 
-/*
-   done - todo 1: change loop delay hardcoding
-   done - todo 2: change sonar delay hardcoding
-   done - todo 3: size of basket (cm or inches?)
-   done - todo 4: percentage of basketball to trigger FULL state
-   done - todo 5: add FULL check logic
-   done - todo 6: connect wifi
-   todo 7: send FULL state via WIFI with MQTT
-   done - todo 8: add LCD
-   done - todo 9: display trash level
-   todo 10: code split for wifi, LCD, SONAR
-   todo 11: button for backlight
-*/
 
 void setup()
 {
+
   Wire.begin(SDA, SCL);           // attach the IIC pin
   lcd.init();                     // LCD driver initialization
   lcd.backlight();                // Open the backlight
@@ -82,31 +84,50 @@ void setup()
   pinMode(echoPin, INPUT);  // set echoPin to input mode
 
   Serial.begin(BAUD);       // Open serial monitor at 115200 baud to see ping results.
+
+
+
   connectWiFi();
+
+  //Get unique mac id
+  byte mac[6];
+  WiFi.macAddress(mac);
+  uniq =  String(mac[0], HEX) + String(mac[1], HEX) + String(mac[2], HEX) + String(mac[3], HEX) + String(mac[4], HEX) + String(mac[5], HEX);
+  Serial.println("Unique ID from WiFI MAC: " + uniq); //24ac40110
+
+  configTime(UTC_OFFSET, UTC_OFFSET_DST, NTP_SERVER);
 
   client.setServer(mqtt_server, port);
   client.setCallback(callback);
   mqttReconnect();
-  client.subscribe("testTopic");
-  
+  if (client.subscribe("testTopic") == true) {
+    Serial.println("Success subscribing to topic");
+    client.subscribe("testTopic");
+  } else {
+    Serial.println("Error subscribing to topic");
+  }
+
 
 }
 
 void loop()
 {
+  DynamicJsonDocument doc(1024);
+  doc["device_MAC_ID"] = uniq;
 
   delay(PING_DELAY); // Wait 100ms between pings (about 20 pings/sec).
 
   Serial.printf("Threshold: ");
   Serial.print(FULL_THRESHOLD);
   Serial.println("cm");
-  //  Serial.printf("BASKET_HEIGHT: ");
-  //  Serial.print(BASKET_HEIGHT);
+  //  Serial.printf("CONTAINER_HEIGHT: ");
+  //  Serial.print(CONTAINER_HEIGHT);
   //  Serial.printf("\n");
   //  Serial.printf("FULL_THRESHOLD_PERCENT: ");
   //  Serial.print(FULL_THRESHOLD_PERCENT);
   //  Serial.printf("\n");
   sonarDistance = getSonar();
+  thresholdPercentage = (1 - (sonarDistance / CONTAINER_HEIGHT)) * 100;
   Serial.printf("Distance: ");
   Serial.print(sonarDistance); // Send ping, get distance in cm and print result
   Serial.println("cm");
@@ -114,21 +135,50 @@ void loop()
   lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
   lcd.print("Trash Level:    ");     // The print content is displayed on the LCD
   lcd.setCursor(0, 1);            // Move the cursor to row 1, column 0
-  lcd.print((1 - (sonarDistance / BASKET_HEIGHT)) * 100);
+  lcd.print(thresholdPercentage);
   lcd.print("%   ");          // The count is displayed every second
 
   if (sonarDistance <= FULL_THRESHOLD)
   {
 
     lcd.setCursor(0, 0);            // Move the cursor to row 0, column 0
-    lcd.print("Basket is Full! ");
+    lcd.print("CONTAINER FULL! ");
     if (state == "EMPTY") // if previous state is EMPTY then send message
     {
       if (!client.connected()) {
         mqttReconnect();
       } else {
-        client.publish("testTopic", "State change to FULL");
-        client.subscribe("testTopic");
+        // client.publish("testTopic", "State change to FULL");
+        // client.subscribe("testTopic");
+        doc["status"] = "FULL";
+        doc["threshold_percentage"] = thresholdPercentage;
+        doc["container_height_cm"] = CONTAINER_HEIGHT;
+        doc["fullness_threshold_percentage"] = FULL_THRESHOLD_PERCENT;
+        doc["sonar_distance"] = sonarDistance;
+        struct tm timeinfo;
+        if (!getLocalTime(&timeinfo)) {
+          Serial.println("Connection Err");
+          return;
+        }
+        printLocalTime();
+        char str[32];
+        strftime(str, sizeof str, "%Y/%m/%d:%H.%M.%S", &timeinfo);
+        doc["datetimestamp"] = str;
+
+        char message[256];
+        size_t n = serializeJson(doc, message);
+        if (client.publish("testTopic", message) == true) {
+          Serial.println("Success sending message");
+          if (client.subscribe("testTopic") == true) {
+            Serial.println("Success subscribing to topic");
+            client.subscribe("testTopic");
+          } else {
+            Serial.println("Error subscribing to topic");
+          }
+        } else {
+          Serial.println("Error sending message");
+        }
+
       }
 
     }
@@ -230,10 +280,12 @@ void mqttReconnect() {
 
     if (client.connect(clientId.c_str(), mqttUser, mqttPassword)) {
       Serial.println("connected");
-      // Once connected, publish an announcement…
-//      client.publish("testTopic", "State change to FULL");
-      // … and resubscribe
-      client.subscribe("testTopic");
+      if (client.subscribe("testTopic") == true) {
+        Serial.println("Success subscribing to topic");
+        client.subscribe("testTopic");
+      } else {
+        Serial.println("Error subscribing to topic");
+      }
     } else {
       Serial.print("failed, rc = ");
       Serial.print(client.state());
@@ -242,4 +294,16 @@ void mqttReconnect() {
       delay(5000);
     }
   }
+}
+
+void printLocalTime() {
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Connection Err");
+    return;
+  }
+
+  Serial.println(&timeinfo, "%H:%M:%S");
+
+  Serial.println(&timeinfo, "%d/%m/%Y   %Z");
 }
