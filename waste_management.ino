@@ -55,21 +55,13 @@ PubSubClient client(espClient);
 #define BAUD 115200
 ///////////////////<<<ESP32 Settings//////////////////////////////
 
-///////////////////Project Settings>>>//////////////////////////////
-float FULL_THRESHOLD = CONTAINER_HEIGHT * (1 - FULL_THRESHOLD_PERCENT);
-// timeOut= 2*MAX_DISTANCE /100 /340 *1000000 = MAX_DISTANCE*58.8
-float timeOut = MAX_DISTANCE * 60;
-int soundVelocity = 340; // define sound speed=340m/s
-float sonarDistance = 0;
-float thresholdPercentage = 0.00;
-String state = "EMPTY";
-String uniq = "";
-///////////////////<<<Project Settings//////////////////////////////
-
 ///////////////////Ultrasonic Sensor (HC-SR04) Settings>>>//////////////////////////////
 #define MAX_DISTANCE 700 // Maximum sensor distance is rated at 400-500cm.
 #define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
 #define SONAR_DELAY 10            // microseconds
+// timeOut= 2*MAX_DISTANCE /100 /340 *1000000 = MAX_DISTANCE*58.8
+float timeOut = MAX_DISTANCE * 60;
+int soundVelocity = 340; // define sound speed=340m/s
 ///////////////////<<<Ultrasonic Sensor Settings//////////////////////////////
 
 ///////////////////LCD>>>//////////////////////////////
@@ -80,6 +72,14 @@ String uniq = "";
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // LiquidCrystal_I2C lcd(0x3F, 16, 2);
 ///////////////////<<<LCD//////////////////////////////
+
+///////////////////Project Settings>>>//////////////////////////////
+float FULL_THRESHOLD = CONTAINER_HEIGHT * (1 - FULL_THRESHOLD_PERCENT);
+float sonarDistance = 0;
+float thresholdPercentage = 0.00;
+String state = "EMPTY";
+String uniq = "";
+///////////////////<<<Project Settings//////////////////////////////
 
 void setup()
 {
@@ -176,7 +176,7 @@ void loop()
         doc["datetimestamp"] = str;
 
         char message[256];
-        size_t n = serializeJson(doc, message);
+//         size_t n = serializeJson(doc, message);
         if (client.publish("testTopic", message) == true) {
           Serial.println("Success sending message");
           if (client.subscribe("testTopic") == true) {
