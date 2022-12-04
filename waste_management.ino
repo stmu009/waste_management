@@ -1,8 +1,8 @@
 /**********************************************************************
-  Filename    : Ultrasonic Ranging
-  Description : Use the ultrasonic module to measure the distance.
-  Auther      : www.freenove.com
-  Modification: 2020/07/11
+  Filename      : waste_management.ion
+  Description   : Use the ultrasonic module to measure waste levels and communicate via MQTT
+  Reference     : www.freenove.com - Ultrasonic Ranging
+  Author        : Damian Ramirez
 **********************************************************************/
 #include <LiquidCrystal_I2C.h>
 #include <Wire.h>
@@ -11,15 +11,20 @@
 #include <ArduinoJson.h>
 #include <NTPClient.h>
 
-///////////////////CONFIGURATION DEFAULTS/////////////////////
+///////////////////CONFIGURATION DEFAULTS>>>//////////////////////////////
 int CONTAINER_HEIGHT = 20;         // cm
 float FULL_THRESHOLD_PERCENT = .80; // percent threshold to empty CONTAINER
-#define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
-///////////////////CONFIGURATION DEFAULTS/////////////////////
+#define PING_DELAY 50000            // FREQUENCY ms (100ms => 20 pings/sec) (5000 => 1 ping per second) (50000 => ping every 10 seconds
+///////////////////<CONFIGURATION DEFAULTS/////////////////////
 
-///////////////////DEVICE CONNECTION SETUP//////////////////////////////
+///////////////////WI-FI CONNECTION SETUP>>>//////////////////////////////
 const char *ssid_Router     = "SSID"; //Enter the router name
 const char *password_Router = "PASSWORD"; //Enter the router password
+WiFiClient espClient;
+//WiFiClientSecure espClient;
+///////////////////<<<WI-FI CONNECTION SETUP>//////////////////////////////
+
+//////////////////MQTT CONNECTION SETUP>>>//////////////////////////////
 const char* mqtt_server = "broker.hivemq.com";
 // const char* mqtt_server = "39958bcd92af469e963bca529830149b.s1.eu.hivemq.cloud";
 // "f19f31c276ac420589c0c2288ef8f802.s1.eu.hivemq.cloud";
@@ -29,47 +34,52 @@ char mac[50];
 char clientId[50];
 const char* mqttUser = "stmu2022";
 const char* mqttPassword = "stmu2022";
-///////////////////DEVICE CONNECTION SETUP//////////////////////////////
+PubSubClient client(espClient);
+//PubSubClient * client;
+//////////////////<<<MQTT CONNECTION SETUP//////////////////////////////
 
+///////////////////TIME SERVER>>>//////////////////////////////
 #define NTP_SERVER     "pool.ntp.org"
 #define UTC_OFFSET     0
 #define UTC_OFFSET_DST 0
+///////////////////<<<TIME SERVER//////////////////////////////
 
+///////////////////PINS>>>//////////////////////////////
 #define trigPin 13       // define TrigPin
 #define echoPin 14       // define EchoPin.
 #define SDA 32                    //Define SDA pins
 #define SCL 33                    //Define SCL pins
-#define MAX_DISTANCE 700 // Maximum sensor distance is rated at 400-500cm.
+///////////////////<<<PINS//////////////////////////////
 
+///////////////////ESP32 Settings>>>//////////////////////////////
 #define BAUD 115200
-#define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
-#define SONAR_DELAY 10            // microseconds
+///////////////////<<<ESP32 Settings//////////////////////////////
+
+///////////////////Project Settings>>>//////////////////////////////
 float FULL_THRESHOLD = CONTAINER_HEIGHT * (1 - FULL_THRESHOLD_PERCENT);
 // timeOut= 2*MAX_DISTANCE /100 /340 *1000000 = MAX_DISTANCE*58.8
 float timeOut = MAX_DISTANCE * 60;
 int soundVelocity = 340; // define sound speed=340m/s
 float sonarDistance = 0;
 float thresholdPercentage = 0.00;
-
 String state = "EMPTY";
-
-
-WiFiClient espClient;
-//WiFiClientSecure espClient;
-
-PubSubClient client(espClient);
-//PubSubClient * client;
-
 String uniq = "";
+///////////////////<<<Project Settings//////////////////////////////
 
+///////////////////Ultrasonic Sensor (HC-SR04) Settings>>>//////////////////////////////
+#define MAX_DISTANCE 700 // Maximum sensor distance is rated at 400-500cm.
+#define PING_DELAY 5000            // ms (100ms => 20 pings/sec)
+#define SONAR_DELAY 10            // microseconds
+///////////////////<<<Ultrasonic Sensor Settings//////////////////////////////
 
+///////////////////LCD>>>//////////////////////////////
 /*
    note:If lcd1602 uses PCF8574T, IIC's address is 0x27,
         or lcd1602 uses PCF8574AT, IIC's address is 0x3F.
 */
 LiquidCrystal_I2C lcd(0x27, 16, 2);
 // LiquidCrystal_I2C lcd(0x3F, 16, 2);
-
+///////////////////<<<LCD//////////////////////////////
 
 void setup()
 {
